@@ -27,17 +27,22 @@ steps_per_day <- activity %>%
   group_by(date) %>%
   summarise(steps = sum(steps, na.rm = TRUE)) 
 
-mean <- mean(steps_per_day$steps)
-median <- median(steps_per_day$steps)
+plot_steps_per_day <- function(steps_per_day) {
 
-# For adding the mean and median to the plot, it is helpful to put them in a dataframe.
-hlines <- data.frame(name = c("mean", "median"), value = c(mean, median))
+  mean <- mean(steps_per_day$steps)
+  median <- median(steps_per_day$steps)
+  
+  # For adding the mean and median to the plot, it is helpful to put them in a dataframe.
+  hlines <- data.frame(name = c("mean", "median"), value = c(mean, median))
+  
+  steps_per_day %>% ggplot() + 
+    geom_col(aes(x = date, y = steps)) +
+    geom_hline(data = hlines, aes(yintercept = value, color = name)) +
+    labs(title = "Total number of steps per day", y = "total number of steps", x = "",
+         caption = paste0("Mean number of steps is ", round(mean), ", median is ", median))  
+}
 
-steps_per_day %>% ggplot() + 
-  geom_col(aes(x = date, y = steps)) +
-  geom_hline(data = hlines, aes(yintercept = value, color = name)) +
-  labs(title = "Total number of steps per day", y = "total number of steps", x = "",
-       caption = paste0("Mean number of steps is ", round(mean), ", median is ", median))
+plot_steps_per_day(steps_per_day)
 ```
 
 ## What is the average daily activity pattern?
@@ -69,17 +74,21 @@ The strategy does not need to be sophisticated. Taking the median for that 5-min
 ```{r}
 median_steps_per_interval <- activity %>%
   group_by(interval) %>%
-  summarise(steps = median(steps, na.rm = TRUE))
+  summarise(median_steps = median(steps, na.rm = TRUE))
 
-get_median_steps <- function(interval) {
-  median_steps_per_interval$steps[which(median_steps_per_interval$interval == interval)]
-} 
-
-imp <- activity %>%
-  mutate(steps = ifelse(is.na(steps), get_median_steps(interval), steps))
+activity_imp <- right_join(activity, median_steps_per_interval, by = "interval") %>%
+  mutate(steps = ifelse(is.na(steps), median_steps, steps))
 ```
 
-**TODO: this doesn't work yet. Some missing values are filled out, but a lot of them are not. Fix this, then create histogram and such**
+```{r}
+steps_per_day <- activity_imp %>%
+  group_by(date) %>%
+  summarise(steps = sum(steps)) 
+
+plot_steps_per_day(steps_per_day)
+```
+
+Compared to the first part of the assignment, the mean has gone up a bit, but the median remained the same. Thus, the impact of imputing value is that the mean increases and probably gets closer to the actual value. The median doesn't change, reflecting the median as a measure is more robust with respect to outliers and missing values.
 
 ## Are there differences in activity patterns between weekdays and weekends?
 ```{r}
@@ -91,11 +100,12 @@ day_type <- function(date) {
   as.factor(ifelse(weekdays(date) %in% c("Saturday", "Sunday"), "weekend", "weekday"))
 } 
 
-activity <- activity %>% mutate(day_type = day_type(date))
+activity_imp <- activity_imp %>%
+  mutate(day_type = day_type(date))
 
-activity %>%
+activity_imp %>%
   group_by(interval, day_type) %>%
-  summarise(steps = mean(steps, na.rm = TRUE)) %>% # TODO: fix data and remove na.rm = TRUE
+  summarise(steps = mean(steps)) %>%
   ggplot() + geom_line(aes(x = interval, y = steps), color = "blue") + facet_wrap(~day_type, nrow = 2)
 ```
 
