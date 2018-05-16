@@ -5,21 +5,97 @@ output:
     keep_md: true
 ---
 
+For reading the data I use the read_csv function in the readr package. This will read the date column as a date directly.
+```{r}
+library(readr)
+library(ggplot2)
+library(dplyr)
+```
 
 ## Loading and preprocessing the data
 
+This step is straightforward: unzipping and reading the data.
+```{r}
+unzip("activity.zip")
 
+activity <- read_csv("activity.csv")
+```
 
 ## What is mean total number of steps taken per day?
+```{r}
+steps_per_day <- activity %>%
+  group_by(date) %>%
+  summarise(steps = sum(steps, na.rm = TRUE)) 
 
+mean <- mean(steps_per_day$steps)
+median <- median(steps_per_day$steps)
 
+# For adding the mean and median to the plot, it is helpful to put them in a dataframe.
+hlines <- data.frame(name = c("mean", "median"), value = c(mean, median))
+
+steps_per_day %>% ggplot() + 
+  geom_col(aes(x = date, y = steps)) +
+  geom_hline(data = hlines, aes(yintercept = value, color = name)) +
+  labs(title = "Total number of steps per day", y = "total number of steps", x = "",
+       caption = paste0("Mean number of steps is ", round(mean), ", median is ", median))
+```
 
 ## What is the average daily activity pattern?
+```{r}
+steps_per_interval <- activity %>%
+  group_by(interval) %>%
+  summarise(steps = mean(steps, na.rm = TRUE))
 
+plot(steps_per_interval, type = "l", xlab = "Interval", ylab = "Number of steps")
+```
 
+```{r}
+max_number_of_steps <- which.max(steps_per_interval$steps)
+```
+
+The 5-minute interval that contains the maximum number of steps (on average across all days) is `r max_number_of_steps`.  
 
 ## Imputing missing values
+```{r}
+missing <- sapply(activity, function(column) { sum(is.na(column))})
 
+missing
+```
+The date and interval variables are always set. However, for the steps variable, `r missing["steps"]` values are missing.
 
+### Strategy for imputing missing values
+The strategy does not need to be sophisticated. Taking the median for that 5-minutes interval seems reasonable. The plot of the average daily activity pattern shows big differences between different times of the day. But common sense suggest that activity may be similar from one day to the next, particularly at night. The median is more robust in case the 5 minutes interval contains outliers.
+
+```{r}
+median_steps_per_interval <- activity %>%
+  group_by(interval) %>%
+  summarise(steps = median(steps, na.rm = TRUE))
+
+get_median_steps <- function(interval) {
+  median_steps_per_interval$steps[which(median_steps_per_interval$interval == interval)]
+} 
+
+imp <- activity %>%
+  mutate(steps = ifelse(is.na(steps), get_median_steps(interval), steps))
+```
+
+**TODO: this doesn't work yet. Some missing values are filled out, but a lot of them are not. Fix this, then create histogram and such**
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+# I have to set the locale, or the weekdays function will return the names of the days in dutch (since I
+# am working on a dutch machine).
+Sys.setlocale("LC_TIME", "C")
+
+day_type <- function(date) {
+  as.factor(ifelse(weekdays(date) %in% c("Saturday", "Sunday"), "weekend", "weekday"))
+} 
+
+activity <- activity %>% mutate(day_type = day_type(date))
+
+activity %>%
+  group_by(interval, day_type) %>%
+  summarise(steps = mean(steps, na.rm = TRUE)) %>% # TODO: fix data and remove na.rm = TRUE
+  ggplot() + geom_line(aes(x = interval, y = steps), color = "blue") + facet_wrap(~day_type, nrow = 2)
+```
+
